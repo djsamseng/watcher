@@ -4,22 +4,68 @@ const {app, BrowserWindow} = Electron;
 const ChildProcess = require("child_process");
 const { PythonShell } = require("python-shell");
 const amqp = require("amqplib/callback_api");
-amqp.connect("amqp://localhost", (error, conn) => {
-    conn.createChannel((error, channel) => {
-        const queue = "hello";
-        channel.assertQueue(queue, { durable: false });
-        channel.sendToQueue(queue, new Buffer("Message uno"));
-        console.log("Sent Message uno");
-    });
 
-    setTimeout(() => {
-        conn.close();
-        console.log("closed connection to amqp");
-    }, 1500);
-});
+let amqpConn;
+let amqpChannel;
+const queue = "hello";
+
+let isConnected = false;
+function connect() {
+    amqp.connect("amqp://localhost", (error, conn) => {
+        amqpConn = conn;
+        conn.createChannel((error, channel) => {
+            amqpChannel = channel;
+            channel.assertQueue(queue, { durable: false });
+            channel.sendToQueue(queue, new Buffer("Message uno"));
+            console.log("Sent Message uno");
+            isConnected = true;
+        });
+    });
+}
+
+function disconnect() {
+    if (isConnected) {
+        console.log("Closing connection to RabbitMQ");
+        isConnected = false;
+        amqpConn.close();
+    }
+    else {
+        console.log("Cannot disconnect: Not connected");
+    }
+}
+
+function sendToRabbitMQ(text) {
+    if (text && text.length > 0) {
+        if (isConnected) {
+            amqpChannel.sendToQueue(queue, new Buffer(text));
+        }
+        else {
+            console.log("Not connected cannot send:", text);
+        }
+    }
+    else {
+        console.log("Invalid text cannot send:", text);
+    }
+}
 
 Electron.ipcMain.on("async-message", (evt, arg) => {
-    console.log(arg);
+    if (arg && arg.command) {
+        const text = arg.command.text;
+        switch (text) {
+            case "exit": {
+                disconnect();
+            } break;
+            case "start": {
+                connect();
+            } break;
+            default: {
+                sendToRabbitMQ(text);
+            } break;
+        }
+    }
+    else {
+        console.log(arg);
+    }
     mainWindow.webContents.send("async-message", "ack");
 });
 
@@ -61,6 +107,7 @@ app.on('ready', createWindow)
 app.on('window-all-closed', function () {
   // On macOS it is common for applications and their menu bar
   // to stay active until the user quits explicitly with Cmd + Q
+  disconnect();
   if (process.platform !== 'darwin') app.quit()
 })
 
