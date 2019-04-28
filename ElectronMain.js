@@ -66,7 +66,7 @@ Electron.ipcMain.on("async-message", (evt, arg) => {
     else {
         console.log(arg);
     }
-    mainWindow.webContents.send("async-message", "ack");
+    // mainWindow.webContents.send("async-message", "ack");
 });
 
 // Keep a global reference of the window object, if you don't, the window will

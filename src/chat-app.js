@@ -1,13 +1,8 @@
 import React from "react"
 //import React, { Component } from "react";
+import ElectronInterface from "./ElectronInterface";
 
 import MainContent from "./MainContent";
-
-const Electron = window.require("electron");
-
-Electron.ipcRenderer.on("async-message", (evt, arg) => {
-    console.log(arg);
-});
 
 const DEFAULT_ROOMS = [
     { 
@@ -32,6 +27,10 @@ class App extends React.Component {
                 "Adam2": 1
             }
         };
+        this.d_electronInterface = new ElectronInterface();
+        this.d_electronInterface.subscribeToElectron(undefined, (args) => {
+            console.log("React received from Electron:", args);
+        });
     }
     handleMessageAdded(room, message) {
         const rooms = this.state.rooms;

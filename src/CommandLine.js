@@ -1,6 +1,5 @@
 import React from "react";
-
-const Electron = window.require("electron");
+import ElectronInterface from "./ElectronInterface";
 
 class CommandLine extends React.Component {
     constructor() {
@@ -10,6 +9,7 @@ class CommandLine extends React.Component {
         };
         this.handleChange = this.handleChange.bind(this);
         this.handleSubmit = this.handleSubmit.bind(this);
+        this.d_electronInterface = new ElectronInterface();
     }
     handleChange(e) {
         this.setState({
@@ -19,7 +19,7 @@ class CommandLine extends React.Component {
     handleSubmit(e) {
         e.preventDefault();
         const text = this.state.message;
-        Electron.ipcRenderer.send("async-message", {
+        this.d_electronInterface.sendToElectron({
             command: {
                 text,
             }
