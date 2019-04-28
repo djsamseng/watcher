@@ -1,8 +1,10 @@
 import json
 import pika
 import numpy as np
+import pprint
 
 from multiprocessing import Process, Pipe, RawArray
+from pymongo import MongoClient
 
 from AdamMain import createAdamMain
 
@@ -22,22 +24,40 @@ class AdamHandle():
                 childConnReceive,
                 childConnSend,
                 args["key"],
-                args["sharedRawArray"],
-                args["sharedRawArrayShape"]
             )
         )
         self.__process.start()
     def sendMessage(self, msg):
         self.__sendConn.send(msg)
 
-def createNewAdam(args):
-    if args["key"] in s_adams:
-        print(args["key"] + " already exists, name:" + args["name"])
-        s_adams[args["key"]].sendMessage("test")
-        return
-    
-    s_adams[args["key"]] = AdamHandle(args)
+def getAdamsCollection():
+    client = MongoClient()
+    db = client.watcher
+    collection = db.Adams
+    return (client, collection)
 
+def createNewAdam(args):
+    if args["name"] in s_adams:
+        print(args["name"] + " already exists")
+        s_adams[args["name"]].sendMessage("test")
+        return
+   
+    client, collection = getAdamsCollection()
+    res = collection.find_one(filter={ "name": args["name"] }, projection=["_id", "name"])
+    if res:
+        args = {}
+        args["key"] = str(res["_id"])
+        args["name"] = res["name"]
+        print("Restored Adam name:" + args["name"] + " key:" + args["key"])
+    else:
+        adamObjectId = collection.insert_one({ "name": args["name"] }).inserted_id
+        adamKey = str(adamObjectId)
+        args["key"] = adamKey
+        print("Created new Adam name:" + args["name"] + " key:" + args["key"])
+
+    client.close()
+    s_adams[args["name"]] = AdamHandle(args)
+    
 def genFakeData():
     # Share
     shape = (16, 1000)
@@ -54,9 +74,20 @@ def onQueueMessage(ch, method, properties, body):
     args["key"] = "Adam1"
     args["name"] = "Adam1"
     dat = genFakeData()
-    args["sharedRawArray"] = dat[1]
-    args["sharedRawArrayShape"] = dat[2]
     createNewAdam(args)
+
+def initFromDb():
+    client, collection = getAdamsCollection()
+    dbAdams = collection.find(projection=["_id", "name"])
+    print("Restoring dbAdams:" + str(dbAdams.count()))
+    for dbAdam in dbAdams:
+        pprint.pprint(dbAdam)
+        args = {}
+        args["key"] = str(dbAdam["_id"])
+        args["name"] = dbAdam["name"]
+        createNewAdam(args)
+
+    client.close()
 
 def requestProcessorMain(): 
     connection = pika.BlockingConnection(pika.ConnectionParameters("localhost"))
@@ -66,6 +97,7 @@ def requestProcessorMain():
                           auto_ack=True,
                           on_message_callback=onQueueMessage)
     print("To exit press Ctrl+C")
+    initFromDb()
     channel.start_consuming()
 
 if __name__ == "__main__":
